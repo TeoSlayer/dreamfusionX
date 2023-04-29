@@ -178,7 +178,7 @@ def circle_poses(device, radius=1.25, theta=60, phi=0, return_dirs=False, angle_
     
 
 class NeRFDataset:
-    def __init__(self, opt, device, type='train', H=256, W=256, size=100):
+    def __init__(self, opt, device, type='train', H=256, W=256, size=100, num_workers=4):
         super().__init__()
         
         self.opt = opt
@@ -297,8 +297,7 @@ class NeRFDataset:
 
         return data
 
-
     def dataloader(self):
-        loader = DataLoader(list(range(self.size)), batch_size=1, collate_fn=self.collate, shuffle=self.training, num_workers=0)
+        loader = DataLoader(list(range(self.size)), batch_size=1, collate_fn=self.collate, shuffle=self.training, num_workers=4)
         loader._data = self
         return loader
