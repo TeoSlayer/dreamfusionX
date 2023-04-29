@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from activation import trunc_exp, biased_softplus
+from activation import trunc_exp
 from .renderer import NeRFRenderer
 
 import numpy as np
@@ -35,10 +35,10 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=3,
-                 hidden_dim=64,
+                 num_layers=2,
+                 hidden_dim=32,
                  num_layers_bg=2,
-                 hidden_dim_bg=32,
+                 hidden_dim_bg=16,
                  ):
         
         super().__init__(opt)
@@ -51,10 +51,10 @@ class NeRFNetwork(NeRFRenderer):
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
         # self.normal_net = MLP(self.in_dim, 3, hidden_dim, num_layers, bias=True)
 
-        self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else biased_softplus
+        self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
 
         # background network
-        if self.opt.bg_radius > 0:
+        if self.bg_radius > 0:
             self.num_layers_bg = num_layers_bg   
             self.hidden_dim_bg = hidden_dim_bg
             
@@ -65,10 +65,20 @@ class NeRFNetwork(NeRFRenderer):
         else:
             self.bg_net = None
 
+    # add a density blob to the scene center
+    def density_blob(self, x):
+        # x: [B, N, 3]
+        
+        d = (x ** 2).sum(-1)
+        # g = self.opt.blob_density * torch.exp(- d / (self.opt.blob_radius ** 2))
+        g = self.opt.blob_density * (1 - torch.sqrt(d) / self.opt.blob_radius)
+
+        return g
+
     def common_forward(self, x):
 
         # sigma
-        enc = self.encoder(x, bound=self.bound, max_level=self.max_level)
+        enc = self.encoder(x, bound=self.bound)
 
         h = self.sigma_net(enc)
 
@@ -157,12 +167,8 @@ class NeRFNetwork(NeRFRenderer):
             # {'params': self.normal_net.parameters(), 'lr': lr},
         ]        
 
-        if self.opt.bg_radius > 0:
+        if self.bg_radius > 0:
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
-        
-        if self.opt.dmtet:
-            params.append({'params': self.sdf, 'lr': lr})
-            params.append({'params': self.deform, 'lr': lr})
 
         return params
