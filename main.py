@@ -1,16 +1,13 @@
 import torch
 import argparse
 import sys
+import math
 
 from nerf.provider import NeRFDataset
 from nerf.utils import *
-
 from nerf.gui import NeRFGUI
 
-# torch.autograd.set_detect_anomaly(True)
-
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
@@ -93,26 +90,18 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.dir_text = True
         opt.cuda_ray = True
-
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
         opt.backbone = 'vanilla'
 
-    if opt.backbone == 'vanilla':
-        from nerf.network import NeRFNetwork
-    elif opt.backbone == 'grid':
-        from nerf.network_grid import NeRFNetwork
-    elif opt.backbone == 'grid_taichi':
-        opt.cuda_ray = False
-        opt.taichi_ray = True
-        import taichi as ti
-        from nerf.network_grid_taichi import NeRFNetwork
-        taichi_half2_opt = True
-        taichi_init_args = {"arch": ti.cuda, "device_memory_GB": 4.0}
-        if taichi_half2_opt:
-            taichi_init_args["half2_vectorization"] = True
-        ti.init(**taichi_init_args)
+    backbone_options = {'vanilla': 'nerf.network',
+                        'grid': 'nerf.network_grid',
+                        'grid_taichi': 'nerf.network_grid_taichi'}
+
+    if opt.backbone in backbone_options:
+        module_name = backbone_options[opt.backbone]
+        NeRFNetwork = getattr(__import__(module_name, fromlist=["NeRFNetwork"]), "NeRFNetwork")
     else:
         raise NotImplementedError(f'--backbone {opt.backbone} is not implemented!')
 
@@ -143,47 +132,41 @@ if __name__ == '__main__':
                 # a special loader for poisson mesh reconstruction,
                 # loader = NeRFDataset(opt, device=device, type='test', H=128, W=128, size=100).dataloader()
                 trainer.save_mesh()
-
+                
     else:
-
         train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100).dataloader()
 
-        if opt.optim == 'adan':
-            from optimizer import Adan
-            # Adan usually requires a larger LR
-            optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-8, weight_decay=2e-5, max_grad_norm=5.0, foreach=False)
-        else: # adam
-            optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
+        optimizer_options = {'adan': lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-8, weight_decay=2e-5, max_grad_norm=5.0, foreach=False),
+                             'adam': lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)}
+
+        if opt.optim in optimizer_options:
+            optimizer = optimizer_options[opt.optim]
+        else:
+            raise NotImplementedError(f'--optim {opt.optim} is not implemented.')
 
         if opt.backbone == 'vanilla':
             warm_up_with_cosine_lr = lambda iter: iter / opt.warm_iters if iter <= opt.warm_iters \
-                else max(0.5 * ( math.cos((iter - opt.warm_iters) /(opt.iters - opt.warm_iters) * math.pi) + 1), 
+                else max(0.5 * (math.cos((iter - opt.warm_iters) / (opt.iters - opt.warm_iters) * math.pi) + 1),
                          opt.min_lr / opt.lr)
-
             scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, warm_up_with_cosine_lr)
         else:
-            scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 1) # fixed
-            # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
+            scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 1)
 
-        if opt.guidance == 'stable-diffusion':
-            from sd import StableDiffusion
-            guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key)
-        elif opt.guidance == 'clip':
-            from nerf.clip import CLIP
-            guidance = CLIP(device)
+        guidance_options = {'stable-diffusion': lambda: StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key),
+                            'clip': lambda: CLIP(device)}
+
+        if opt.guidance in guidance_options:
+            guidance = guidance_options[opt.guidance]()
         else:
             raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         if opt.gui:
-            trainer.train_loader = train_loader # attach dataloader to trainer
-
+            trainer.train_loader = train_loader
             gui = NeRFGUI(opt, trainer)
             gui.render()
-
         else:
             valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=5).dataloader()
-
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
             trainer.train(train_loader, valid_loader, max_epoch)
