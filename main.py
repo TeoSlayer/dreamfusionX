@@ -5,10 +5,7 @@ import sys
 from nerf.provider import NeRFDataset
 from nerf.utils import *
 
-# torch.autograd.set_detect_anomaly(True)
-
-if __name__ == '__main__':
-
+def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
@@ -32,7 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('--tet_grid_size', type=int, default=128, help="tet grid size")
     parser.add_argument('--init_ckpt', type=str, default='', help="ckpt to init dmtet")
 
-    ### training options
+    # training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="max learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
@@ -69,7 +66,7 @@ if __name__ == '__main__':
     parser.add_argument('--known_view_noise_scale', type=float, default=2e-3, help="random camera noise added to rays_o and rays_d")
     parser.add_argument('--dmtet_reso_scale', type=float, default=8, help="multiply --h/w by this for dmtet finetuning")
 
-    ### dataset options
+    # dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.01, help="minimum near distance for camera")
@@ -91,7 +88,7 @@ if __name__ == '__main__':
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
 
-    ### regularizations
+    # regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
@@ -101,14 +98,14 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_mesh_normal', type=float, default=0.5, help="loss scale for mesh normal smoothness")
     parser.add_argument('--lambda_mesh_laplacian', type=float, default=0.5, help="loss scale for mesh laplacian")
 
-    parser.add_argument('--lambda_guidance', type=float, default=1, help="loss scale for SDS")
+    parser.add_argument('--lambda_guidance', type=float, default=1, help="loss scalefor SDS")
     parser.add_argument('--lambda_rgb', type=float, default=10, help="loss scale for RGB")
     parser.add_argument('--lambda_mask', type=float, default=5, help="loss scale for mask (alpha)")
     parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for normal map")
     parser.add_argument('--lambda_depth', type=float, default=0.1, help="loss scale for relative depth")
     parser.add_argument('--lambda_2d_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
 
-    ### GUI options
+    # GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
     parser.add_argument('--W', type=int, default=800, help="GUI width")
     parser.add_argument('--H', type=int, default=800, help="GUI height")
@@ -118,7 +115,10 @@ if __name__ == '__main__':
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
-    opt = parser.parse_args()
+    return parser.parse_args()
+
+def main():
+    opt = parse_arguments()
 
     if opt.O:
         opt.fp16 = True
@@ -286,3 +286,6 @@ if __name__ == '__main__':
 
             if opt.save_mesh:
                 trainer.save_mesh()
+
+if __name__ == '__main__':
+    main()
