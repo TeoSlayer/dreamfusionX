@@ -30,18 +30,10 @@
         journal = {GitHub repository},
         howpublished = {\url{https://github.com/huggingface/diffusers}}
     }
-    ```
-
-* The GUI is developed with [DearPyGui](https://github.com/hoffstadt/DearPyGui).
-
-# Citation
-
-If you find this work useful, a citation will be appreciated via:
-```
-@misc{stable-dreamfusion,
+    @misc{stable-dreamfusion,
     Author = {Jiaxiang Tang},
     Year = {2022},
     Note = {https://github.com/ashawkey/stable-dreamfusion},
     Title = {Stable-dreamfusion: Text-to-3D with Stable-diffusion}
-}
+    }
 ```
